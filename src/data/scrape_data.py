@@ -1,189 +1,84 @@
-import requests
-from bs4 import BeautifulSoup
-import time
 import csv
-import os
+import time
+import random
+from playwright.sync_api import sync_playwright
 
-
-# Base URL for Nairobi property rentals
+# Base URL for Nairobi rental properties
 BASE_URL = "https://www.property24.co.ke/property-to-rent-in-nairobi-p95"
 
-# Headers to mimic a browser (helps avoid blocking)
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/115.0.0.0 Safari/537.36"
-}
+def scrape_property24(start_page=1, min_delay=2, max_delay=5):
+    """Scrape property listings from Property24 Nairobi rentals."""
 
-# Save scraped data inside data/raw/
-CSV_FILE = os.path.join("data", "raw", "property24_listings.csv")
-
-# File to keep track of last scraped page (for resume feature)
-CHECKPOINT_FILE = os.path.join("data", "raw", "last_page.txt")
-
-
-def fetch_page(page):
-    """Fetch the HTML content of a given page number."""
-    params = {
-        "propertytypes": "houses,apartments-flats,townhouses",
-        "Page": page
-    }
-    r = requests.get(BASE_URL, headers=HEADERS, params=params, timeout=10)
-    r.raise_for_status()  # Raise error if request fails
-    return r.text
-
-
-def parse_listing_detail(url):
-    """Extract extra info from a property detail page (description + agent)."""
-    try:
-        # Send request to detail page
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        # Extract property description
-        description = soup.select_one("div.js_readMoreText")
-        description_text = description.get_text(strip=True) if description else None
-
-        # Extract agent name (if present)
-        agent_name = None
-        agent_tag = soup.select_one("div.agent-details h2, div.agent-details span")
-        if agent_tag:
-            agent_name = agent_tag.get_text(strip=True)
-
-        return {
-            "description": description_text,
-            "agent_name": agent_name
-        }
-    except Exception as e:
-        print(f"Failed to fetch detail page {url}: {e}")
-        return {}
-
-
-def parse_page(html):
-    """Parse all property listings from one page of HTML."""
-    soup = BeautifulSoup(html, "html.parser")
     listings = []
+    page_num = start_page
 
-    # Each property card is inside a div with class 'p24_content'
-    for card in soup.select("div.p24_content"):
-        item = {}
+    with sync_playwright() as p:
+        # Launch headless browser
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
-        # Price
-        price_tag = card.select_one("span.p24_price")
-        item["price"] = price_tag.get_text(strip=True) if price_tag else None
+        while True:
+            url = f"{BASE_URL}?Page={page_num}"
+            print(f"📄 Fetching page {page_num}… {url}")
+            page.goto(url, timeout=60000)
 
-        # Title (property type + area)
-        title_tag = card.select_one("span.p24_title")
-        item["title"] = title_tag.get_text(strip=True) if title_tag else None
+            # Scroll to load lazy content
+            scroll_height = page.evaluate("() => document.body.scrollHeight")
+            for y in range(0, scroll_height, 600):
+                page.evaluate(f"window.scrollTo(0, {y})")
+                time.sleep(0.5)
+            time.sleep(2)
 
-        # Address
-        address_tag = card.select_one("span.p24_address")
-        item["address"] = address_tag.get_text(strip=True) if address_tag else None
+            # Grab all property cards
+            cards = page.query_selector_all(".js_listingTile")
+            print(f"   → Found {len(cards)} listings")
 
-        # Features (bedrooms, bathrooms, parking)
-        features = card.select("span.p24_featureDetails")
-        for f in features:
-            txt = f.get_text(strip=True)
-            if "Bed" in txt:
-                item["bedrooms"] = txt
-            elif "Bath" in txt:
-                item["bathrooms"] = txt
-            elif "Parking" in txt or "Garage" in txt:
-                item["parking"] = txt
+            if not cards:
+                print("✅ No more listings found. Stopping.")
+                break
 
-        # Property detail page link
-        link = card.find_parent("a", href=True)
-        if link:
-            item["url"] = "https://www.property24.co.ke" + link["href"]
+            for card in cards:
+                def safe_text(selector):
+                    el = card.query_selector(selector)
+                    return el.inner_text().strip() if el else None
 
-            # Fetch extra info from detail page
-            detail_data = parse_listing_detail(item["url"])
-            item.update(detail_data)
+                link_el = card.query_selector("a")
+                url = "https://www.property24.co.ke" + link_el.get_attribute("href") if link_el else None
 
-        listings.append(item)
+                listings.append({
+                    "title": safe_text(".p24_propertyTitle"),
+                    "price": safe_text(".p24_price"),
+                    "location": safe_text(".p24.location"),
+                    "address": safe_text(".p24_address"),
+                    "bathrooms": safe_text(".p24_feature_Details"),
+                    "floor_size": safe_text(".p24_size"),
+                    "url": url
+                })
+
+            # Random wait before next page
+            delay = random.uniform(min_delay, max_delay)
+            print(f"⏳ Waiting {delay:.1f}s before next page…")
+            time.sleep(delay)
+
+            page_num += 1  # Go to next page
+
+        browser.close()
+
+    # Save results to CSV
+    output_file = "data/raw/property24_listings.csv"
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "title", "price", "location", "address",
+            "bathrooms", "floor_size", "url"
+        ])
+        writer.writeheader()
+        writer.writerows(listings)
+
+    print(f"🏁 Done! Total properties scraped: {len(listings)}")
+    print(f"📂 Data saved to {output_file}")
 
     return listings
 
 
-def save_csv(listings, mode="a"):
-    """Save listings to CSV file (append mode by default)."""
-    # Collect all keys to ensure consistent columns
-    keys = set().union(*(d.keys() for d in listings))
-
-    # Check if file already exists
-    file_exists = os.path.isfile(CSV_FILE)
-
-    with open(CSV_FILE, mode, newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=sorted(keys))
-
-        # Write header only if creating new file
-        if not file_exists or mode == "w":
-            writer.writeheader()
-
-        # Write rows
-        writer.writerows(listings)
-
-
-def save_checkpoint(page):
-    """Save the last successfully scraped page number to file."""
-    with open(CHECKPOINT_FILE, "w") as f:
-        f.write(str(page))
-
-
-def load_checkpoint():
-    """Load the last scraped page number, or return 1 if none found."""
-    if os.path.isfile(CHECKPOINT_FILE):
-        with open(CHECKPOINT_FILE, "r") as f:
-            return int(f.read().strip())
-    return 1
-
-
-def scrape_all(delay=2):
-    """Scrape all property pages until no more listings remain."""
-    all_count = 0
-
-    # Start from last checkpoint (or page 1 if fresh run)
-    page = load_checkpoint()
-
-    while True:
-        print(f"Fetching page {page}…")
-        html = fetch_page(page)
-        listings = parse_page(html)
-
-        # Stop if no listings found (end of results)
-        if not listings:
-            print("No more listings found. Scraping complete.")
-            break
-
-        # Show progress
-        print(f"  Found {len(listings)} listings on page {page}")
-
-        # Save results to CSV
-        save_csv(listings, mode="a")
-        all_count += len(listings)
-
-        # Save checkpoint
-        save_checkpoint(page)
-
-        # Sleep to avoid getting blocked
-        time.sleep(delay)
-
-        # Next page
-        page += 1
-
-    return all_count
-
-
 if __name__ == "__main__":
-    print("Starting Property24 scraper…")
-
-    # If running fresh, delete old CSV so we don't append duplicates
-    if not os.path.isfile(CHECKPOINT_FILE):
-        if os.path.isfile(CSV_FILE):
-            os.remove(CSV_FILE)
-
-    # Scrape all pages
-    total = scrape_all(delay=2)
-    print(f"Total properties scraped: {total}")
-    print(f"Data saved to {CSV_FILE}")
+    scrape_property24(start_page=1)
