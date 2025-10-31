@@ -1,11 +1,9 @@
-# 🚀 End-to-End Machine Learning Project
+<h1 align="center">End-to-End Machine Learning Project</h1>
 
 ## 📘 Overview
 This repository contains a **fully modular, production-ready Machine Learning project** built from scratch and deployed on **AWS** and **Azure** using **Docker containerization**.
 
 The project demonstrates the complete lifecycle of an ML application from **data ingestion and transformation** to **model training**, **Flask API deployment**, and **cloud deployment** following best software engineering practices like **logging**, **custom exception handling**, and **config-driven modularization**.
-
----
 
 ## 🧱 Project Architecture
 ```
@@ -46,8 +44,6 @@ project-root/
 └── README.md
 ```
 
----
-
 ## 🧠 Features
 - 🔄 **End-to-End ML Pipeline:** Data ingestion → transformation → model training → evaluation  
 - 🧹 **Automated Preprocessing:** Handles missing values, encoding, and scaling  
@@ -60,8 +56,6 @@ project-root/
 - ☁️ **Cloud Deployment:** Hosted on **AWS EC2** and **Azure Web App**  
 - 🧩 **Configurable Setup:** Uses `setup.py` and `requirements.txt` for easy installation  
 
----
-
 ## 🧩 Key Components
 | Module | Description |
 |--------|-------------|
@@ -73,8 +67,6 @@ project-root/
 | **`utils.py`** | Helper utilities (e.g., file handling, model saving/loading) |
 | **`app.py`** | Flask application for model inference |
 | **`Dockerfile`** | Defines environment for containerized deployment |
-
----
 
 ## 🚀 Getting Started
 
