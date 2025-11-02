@@ -1,3 +1,12 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python Version">
+  <img src="https://img.shields.io/badge/Framework-Flask-green.svg" alt="Flask">
+  <img src="https://img.shields.io/badge/Container-Docker-blue.svg" alt="Docker">
+  <img src="https://img.shields.io/badge/Deployment-AWS%20|%20Azure-orange.svg" alt="Deployment">
+  <img src="https://img.shields.io/badge/License-MIT-lightgrey.svg" alt="License">
+</p>
+
+---
 <h1 align="center">End-to-End Machine Learning Project</h1>
 
 ## 📘 Overview
