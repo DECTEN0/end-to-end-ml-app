@@ -148,7 +148,8 @@ class DataTransformation:
                 test_arr,
                 self.data_transformation_config.preprocessor_obj_file_path
             )
-
+        
+            logging.info("Data Transformation is competed.")
         except Exception as e:
             logging.info("Error in initiate_data_transformation")
             raise CustomException(e,sys)
